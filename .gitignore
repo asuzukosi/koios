@@ -1,0 +1,10 @@
+*.pkl
+**/.venv/
+**/__pycache__/
+**/node_modules/
+**/dist/
+**/build/
+**/*.egg-info/
+**/*.egg/
+**/*.egg-info/
+**/*.egg-info/
