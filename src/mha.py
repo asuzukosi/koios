@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from src.attn_mask import causal_mask_mha
-
+from typing import Optional
 class MultiHeadSelfAttention(nn.Module):
     """
     multi-head attention layer
@@ -35,7 +35,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.trace_shapes = trace_shapes
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cross_v: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         forward pass of the input
         """
@@ -86,7 +86,12 @@ class MultiHeadSelfAttention(nn.Module):
         # assert the shape of weights
         assert weights.shape == (B, self.n_head, T, T), "weights must be of shape (B, self.n_head, T, T)"
         # compute the context
-        ctx: torch.Tensor = weights @ v
+        if cross_v is None:
+            assert v.shape == (B, self.n_head, T, self.d_head), "v must be of shape (B, self.n_head, T, self.d_head)"
+            ctx: torch.Tensor = weights @ v
+        else:
+            assert cross_v.shape == (B, self.n_head, T, self.d_head), "cross_v must be of shape (B, self.n_head, T, self.d_head)"
+            ctx: torch.Tensor = weights @ cross_v
         # assert the shape of ctx
         assert ctx.shape == (B, self.n_head, T, self.d_head), "ctx must be of shape (B, self.n_head, T, self.d_head)"
         # transpose to swap the heads and tokens

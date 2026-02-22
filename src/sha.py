@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from src.attn_mask import causal_mask_sha
-
+from typing import Optional
 class SingleHeadSelfAttention(nn.Module):
     """
     single-head attention layer
@@ -27,7 +27,7 @@ class SingleHeadSelfAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.trace_shapes = trace_shapes
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cross_v: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         forward pass of the input
         """
@@ -66,7 +66,12 @@ class SingleHeadSelfAttention(nn.Module):
         # assert the shape of weights
         assert weights.shape == (B, T, T), "weights must be of shape (B, T, T)"
         # compute the context
-        ctx: torch.Tensor = weights @ v
+        if cross_v is None:
+            assert v.shape == (B, T, d_model), "v must be of shape (B, T, d_model)"
+            ctx: torch.Tensor = weights @ v
+        else:
+            assert cross_v.shape == (B, T, d_model), "cross_v must be of shape (B, T, d_model)"
+            ctx: torch.Tensor = weights @ cross_v
         # assert the shape of ctx
         assert ctx.shape == (B, T, d_model), "ctx must be of shape (B, T, d_model)"
         # project the context back to the model dimension

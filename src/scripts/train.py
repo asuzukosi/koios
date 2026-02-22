@@ -1,6 +1,8 @@
 import argparse, os, sys, pathlib, time
 import torch
 from src.tokenizer import ByteTokenizer
+from src.model import GPT
+from src.dataset import ByteDataset
 
 
 def main():
@@ -87,7 +89,26 @@ def main():
                 best_val = losses['val']
                 ckpt_path = args.out_dir / f"model_best.pth"
                 os.makedirs(args.out_dir, exist_ok=True)
+                torch.save({"model": model.state_dict(), 
+                            "config": {
+                                "vocab_size": tok.vocab_size, 
+                                "block_size": args.block_size,
+                                "n_layers": args.n_layers,
+                                "n_head": args.n_head,
+                                "d_model": args.d_model,
+                                "dropout": args.dropout
+                            }}, ckpt_path)
+        if args.sample_every > 0 and step % args.sample_every == 0:
+            start = torch.randint(low=0, high=len(ds.train) - args.block_size -1, size=(1,)).item()
+            seed = ds.train[start:start+args.block_size].unsqueeze(0).to(args.device)
+            out = model.generate(seed, max_new_tokens=args.sample_tokens, temperature=args.temperature, top_k=args.top_k, top_p=args.top_p)
+            txt = tok.decode(out[0].cpu().tolist())
+            print(f"step {step:5d} | sample: {txt}")
+        
+        # final save
+        ckpt_path = args.out_dir / f"model_final.pth"
+        torch.save({"model": model.state_dict()}, ckpt_path)
+        print(f"model saved to {ckpt_path}")
 
-
-
-    
+if __name__ == "__main__":
+    main()
