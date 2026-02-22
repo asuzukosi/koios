@@ -2,7 +2,7 @@ import subprocess, sys, pathlib, argparse, shlex
 
 ROOT = pathlib.Path(__file__).resolve().parent
 OUT = ROOT / "output"
-
+RUN = ROOT / "run"
 def run(cmd: str):
     print(f"Running: {cmd}")
     res = subprocess.run(shlex.split(cmd), capture_output=True, text=True)
@@ -26,6 +26,14 @@ def main():
     run("python -m pytest -q tests/test_causal_math.py")
     # matrix math walthrough for mha
     run("python -m src.demos.mha_shapes")
+
+    # quick stroke training on a tiny file path tiny_hi.txt adjust as needed
+    run("python src.scripts.train --data data/tiny_hi.txt --steps 400 --sample_every 100 --batch_size 32 --block_size 128 --n_layers 2 --n_head 2 --d_model 128 --dropout 0.1") # block size is the context window size
+    # sample from the base checkpoint
+    run(f"python src.scripts.sample --checkpoint {RUN / "model.pth"} --tokens 100 --prompt 'Once upon a time'")
+
+    # evaluate final val loss
+    run(f"python src.scripts.evaluate --checkpoint {RUN / "model.pth"} --data data/tiny_hi.txt --iters 50 --block_size 128") # block size is the context window size
 
     if args.visualize:
         run("python -m src.demos.visualize_multi_head")
