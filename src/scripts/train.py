@@ -5,6 +5,20 @@ from src.model import GPT
 from src.dataset import ByteDataset
 
 
+def estimate_loss(model: GPT, ds: ByteDataset, args: argparse.Namespace) -> dict[str, float]:
+    model.eval()
+    losses = {}
+    with torch.no_grad():
+        for split in ['train', 'val']:
+            losses = []
+            for _ in range(args.eval_iters):
+                xb, yb = ds.get_batch(split, args.batch_size, args.device)
+                _, loss = model(xb, yb)
+                losses.append(loss.item())
+            losses[split] = sum(losses) / len(losses)
+    model.train()
+    return losses
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--data", type=str, required=True, help="Path to the data file")
