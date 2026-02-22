@@ -26,3 +26,25 @@ class PointwiseFeedForward(nn.Module):
         forward pass of the input
         """
         return self.net(x)
+    
+
+class SwishdGELU(nn.Module):
+    """
+    swish gelu activation function
+    """
+    def __init__(self, dim: int, mult: int = 4, dropout: float = 0.0):
+        super().__init__()
+        inner = mult * dim
+        self.w1 = nn.Linear(dim, inner, bias=False)
+        self.w2 = nn.Linear(dim, inner, bias=False)
+        self.w3 = nn.Linear(inner, dim, bias=False)
+        self.act = nn.SiLU()
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        forward pass of the input
+        """
+        a = self.w1(x) # project the input to the inner dimension
+        b = self.act(self.w2(x)) # residual flow through the swish activation function
+        return self.dropout(self.w3(a * b)) # project the output back to the model dimension

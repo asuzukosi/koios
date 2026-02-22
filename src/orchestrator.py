@@ -15,6 +15,7 @@ def run(cmd: str):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--visualize", action="store_true", help="Visualize the model")
+    p.add_argument("--demo", action="store_true", help="Run the demonstrations")
     args = p.parse_args()
     
     OUT.mkdir(parents=True, exist_ok=True)
@@ -24,6 +25,9 @@ def main():
     # run unit tests
     run("python -m pytest -q tests/test_attn_math.py")
     run("python -m pytest -q tests/test_causal_math.py")
+    run("python -m pytest -q tests/test_kvcache_shapes.py")
+    run("python -m pytest -q tests/test_rmsnorm.py")
+    run("python -m pytest -q test/test_rope_apply.py")
     # matrix math walthrough for mha
     run("python -m src.demos.mha_shapes")
 
@@ -38,6 +42,9 @@ def main():
     if args.visualize:
         run("python -m src.demos.visualize_multi_head")
         print(f"vizialization images saved to {OUT / 'visualization'}")
+
+    if args.demo:
+        run("python -m src.demos.generate --rmsnorm --rope --swiglu --sliding_window 64 --sink 4 --tokens 200")
     
     print(f"all demonstrations completed")
 
