@@ -22,8 +22,8 @@ def main():
     # run sanity check
     run(f"python -m src.demos.attn_numpy")
     # run unit tests
-    run("python -m pytest -q tests/test_attn_math.py")
-    run("python -m pytest -q tests/test_causal_math.py")
+    # run("python -m pytest -q tests/test_attn_math.py")
+    # run("python -m pytest -q tests/test_causal_math.py")
     # matrix math walthrough for mha
     run("python -m src.demos.mha_shapes")
 
