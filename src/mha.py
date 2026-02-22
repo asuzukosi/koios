@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from attn_mask import causal_mask
+from src.attn_mask import causal_mask_mha
 
 class MultiHeadSelfAttention(nn.Module):
     """
@@ -40,14 +40,20 @@ class MultiHeadSelfAttention(nn.Module):
         forward pass of the input
         """
         # validate the shape
+        if self.trace_shapes:
+            print(f"input x: {tuple(x.shape)} = B, T, d_model")
         B, T, d_model = x.shape
         assert d_model == self.d_model, "d_model must be equal to the model dimension"
         # compute the qkv
         qkv: torch.Tensor = self.qkv(x)
         # assert the shape of qkv
         assert qkv.shape == (B, T, 3 * d_model), "qkv must be of shape (B, T, 3 * d_model)"
+        if self.trace_shapes:
+            print(f"qkv: {tuple(qkv.shape)} = B, T, 3 * d_model")
         # view the qkv into (B, T, 3, n_head, d_head)
         qkv = qkv.view(B, T, 3, self.n_head, self.d_head)
+        if self.trace_shapes:
+            print(f"qkv: {tuple(qkv.shape)} = B, T, 3, self.n_head, self.d_head")
         # assert the shape of qkv
         assert qkv.shape == (B, T, 3, self.n_head, self.d_head), "qkv must be of shape (B, T, 3, self.n_head, self.d_head)"
         # split the qkv into q, k, v
@@ -60,6 +66,8 @@ class MultiHeadSelfAttention(nn.Module):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
+        if self.trace_shapes:
+            print(f"transpose heads q: {tuple(q.shape)}, k: {tuple(k.shape)}, v: {tuple(v.shape)}") # this is the standard shapes for the attention calculation
         # assert the shape of q, k, v
         assert q.shape == (B, self.n_head, T, self.d_head), "q must be of shape (B, self.n_head, T, self.d_head)"
         assert k.shape == (B, self.n_head, T, self.d_head), "k must be of shape (B, self.n_head, T, self.d_head)"
@@ -67,6 +75,10 @@ class MultiHeadSelfAttention(nn.Module):
         # compute the scores
         scale = 1 / math.sqrt(self.d_head)
         scores = q @ k.transpose(-2, -1) * scale
+        mask = causal_mask_mha(T, x.device)
+        scores = scores.masked_fill(mask, float("-inf")) 
+        if self.trace_shapes:
+            print(f"scores: {tuple(scores.shape)} = B, self.n_head, T, T")
         # assert the shape of scores
         assert scores.shape == (B, self.n_head, T, T), "scores must be of shape (B, self.n_head, T, T)"
         # compute the weights
@@ -89,6 +101,16 @@ class MultiHeadSelfAttention(nn.Module):
         out: torch.Tensor = self.proj(ctx)
         # assert the shape of out
         assert out.shape == (B, T, self.d_model), "out must be of shape (B, T, self.d_model)"
+        if self.trace_shapes:
+            print(f"output out: {tuple(out.shape)} = B, T, d_model")
         # return the output
         return out
-        
+
+if __name__ == "__main__":
+    # test the multi-head attention layer
+    d_model = 12
+    n_head = 3
+    x = torch.randn(1, 5, d_model)
+    attn = MultiHeadSelfAttention(d_model, n_head, trace_shapes=True)
+    out: torch.Tensor = attn(x)
+    print(f"output out: {tuple(out.shape)} = B, T, d_model")

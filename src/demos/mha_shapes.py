@@ -34,7 +34,7 @@ if __name__ == "__main__":
     log(f"transpose heads q: {tuple(q.shape)}, k: {tuple(k.shape)}, v: {tuple(v.shape)}")
     scale = 1 / math.sqrt(d_head)
     scores = q @ k.transpose(-2, -1) * scale
-    log(f"scores q@k^T: {tuple(scores.shape)} = B, n_head, T, d_head")
+    log(f"scores q@k^T: {tuple(scores.shape)} = B, n_head, T, T")
     weights = torch.softmax(scores, dim=-1)
     log(f"softmax (weights): {tuple(weights.shape)} = B, n_head, T, d_head")
     ctx = weights @ v

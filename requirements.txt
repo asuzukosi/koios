@@ -1,2 +1,4 @@
 transformers
 torch
+pytest
+numpy
