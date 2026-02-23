@@ -1,6 +1,8 @@
 import torch
 from dataclasses import dataclass
 
+# kw cache memory math: batch size * sequence length * number of layers * 2 * d_model * precision (fp16/fp32)
+
 @dataclass
 class KVCache:
     k: torch.Tensor

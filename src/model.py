@@ -88,6 +88,7 @@ class GPTModern(nn.Module):
         self.ln_f = RMSNorm(d_model)
         self.lm_head = nn.Linear(d_model, vocab_size)
         
+    # TODO: add implementation for lora adapter 
     def forward(self, idx: torch.Tensor, targets: Optional[torch.Tensor] = None, 
                 kv_cache_list: Optional[list[torch.Tensor]] = None, start_pos: int = 0) -> tuple[torch.Tensor, Optional[torch.Tensor], list[torch.Tensor]]:
         B, T = idx.shape # (batch_size, sequences) (B, T)
@@ -108,8 +109,28 @@ class GPTModern(nn.Module):
         else:
             loss = None
         return out, loss, new_caches
+    
 
-    def generate(self, idx: torch.Tensor,
+    def generate(self, prompt: torch.Tensor, max_new_tokens:int=200, temperature: float=1.0, top_k: int=40,
+                  top_p: float=0.9, sliding_window: Optional[int] = None, attention_sink: Optional[int] = None) -> torch.Tensor:
+        self.eval()
+        idx = prompt
+        kvs = [None] * len(self.blocks)
+
+        # TODO: clearly separate prefill and decode stages and make use of kv cache
+        for _ in range(max_new_tokens):
+            idx_cond = idx[:, -self.block_size:] if kvs[0] is None else idx[: -1:]
+            # absolute start position from cache lenght (0 on first step)
+            start_pos = 0 if kvs[0] is None else kvs[0].k.size(2)
+            logits, _, kvs = self(idx_cond, kv_cache_list=kvs, start_pos=start_pos)
+            next_logits = logits[:, -1, :] / max(temperature, 1e-6)
+            next_logits = top_k_top_p_filtering(next_logits, top_k=top_k, top_p=top_p)
+            probs = F.softmax(next_logits, dim=-1)
+            next_id = torch.argmax(probs, dim=-1, keepdim=True) if temperature == 0.0 else torch.multinomial(probs, num_samples=1)
+            idx = torch.cat([idx, next_id], dim=1)
+        return idx
+
+    def generate_nocache(self, idx: torch.Tensor,
                 max_new_tokens:int=200, # used to limit the number of new tokens generated
                 temperature: float=1.0, # used to control the randomness of selected tokens when sampling
                 top_k: int=40, # used to limit the number of most likely tokens to consider
