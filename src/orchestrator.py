@@ -27,7 +27,10 @@ def main():
     run("python -m pytest -q tests/test_causal_math.py")
     run("python -m pytest -q tests/test_kvcache_shapes.py")
     run("python -m pytest -q tests/test_rmsnorm.py")
-    run("python -m pytest -q test/test_rope_apply.py")
+    run("python -m pytest -q tests/test_rope_apply.py")
+    run("python -m pytest -q tests/test_tokenizer_bpe.py")
+    run("python -m pytest -q tests/test_scheduler.py")
+    run("python -m pytest -q tests/test_resume_shapes.py")
     # matrix math walthrough for mha
     run("python -m src.demos.mha_shapes")
 

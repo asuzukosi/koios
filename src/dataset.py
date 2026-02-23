@@ -1,5 +1,8 @@
 import pathlib
 import torch
+from torch.utils.data import DataLoader, Dataset
+from src.bpe import BPETokenizer
+from pathlib import Path
 
 class ByteDataset:
     """
@@ -27,3 +30,27 @@ class ByteDataset:
     
     def get_vocab(self) -> dict[int, str]:
         return {i: chr(i) for i in range(256)}
+    
+class TextBPEDataset(Dataset):
+    """
+    holds BPE encoded tokens and yields (x, y) blocks of LM
+    - block size: sequence length ( context window )
+    - split: fraction for trianing (rest for validation)
+    """
+    def __init__(self, path: str, tokenizer: BPETokenizer, block_size: int = 256, split: float = 0.9):
+        super().__init__()
+        self.block_size = block_size
+        text = Path(path).read_text(encoding="utf-8")
+        self.ids = torch.tensor(tokenizer.encode(text), dtype=torch.long)
+
+    def __len__(self) -> int:
+        return max(0, self.ids.numel() - self.block_size - 1)
+    
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        x = self.ids[idx:idx+self.block_size]
+        y = self.ids[idx+1:idx+self.block_size+1]
+        return x, y
+    
+def make_loader(path: str, tokenizer: BPETokenizer, block_size: int = 256, batch_size: int = 32, shuffle: bool = True) -> DataLoader:
+    ds = TextBPEDataset(path, tokenizer, block_size)
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)

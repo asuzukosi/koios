@@ -1,18 +1,22 @@
-import argparse, os, sys, pathlib, time
+import argparse, os, time
 import torch
-from src.tokenizer import ByteTokenizer
 from src.model import GPT
-from src.dataset import ByteDataset
+from src.dataset import make_loader
+from torch.utils.data import DataLoader
+from src.bpe import BPETokenizer
+from src.tokenizer import ByteTokenizer
+from src.amp_accum import AmpGrad
+from src.checkpointing import _log_hparams_tb, _maybe_log_graph_tb, _is_tb
+from src.logger import init_logger
 
-
-def estimate_loss(model: GPT, ds: ByteDataset, args: argparse.Namespace) -> dict[str, float]:
+def estimate_loss(model: GPT, loader: DataLoader, args: argparse.Namespace) -> dict[str, float]:
     model.eval()
     losses = {}
     with torch.no_grad():
         for split in ['train', 'val']:
             losses = []
             for _ in range(args.eval_iters):
-                xb, yb = ds.get_batch(split, args.batch_size, args.device)
+                xb, yb = next(loader)
                 _, loss = model(xb, yb)
                 losses.append(loss.item())
             losses[split] = sum(losses) / len(losses)
@@ -37,7 +41,10 @@ def main():
     p.add_argument("--compile", action="store_true",default=False, help="Compile the model")
     p.add_argument("--eval_interval", type=int,default=200, help="Evaluation interval")
     p.add_argument("--eval_iters", type=int,default=50, help="Number of iterations to evaluate")
-
+    p.add_argument("--use_bpe", action="store_true",default=False, help="Use BPE tokenizer")
+    p.add_argument("--warmup_steps", type=int,default=100, help="Warmup steps")
+    p.add_argument("--mixed_precision", action="store_true",default=False, help="Use mixed precision")
+    p.add_argument("--grad_accum_steps", type=int,default=1, help="Gradient accumulation steps")
     p.add_argument("--sample_every", type=int,default=200, help="Number of steps to sample from the model")
     p.add_argument("--sample_tokens", type=int,default=256, help="Number of tokens to sample from the model")
     p.add_argument("--temperature", type=float,default=1.0, help="Temperature for sampling")
@@ -67,8 +74,12 @@ def main():
     assert 0 <= args.dropout <= 1, "Dropout rate must be between 0 and 1"
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    tok = ByteTokenizer()
-    ds = ByteDataset(args.data, block_size=args.block_size)
+    if args.use_bpe:
+        tok = BPETokenizer()
+        # train tokenizer on data (data for training tokenizer should be different from data for training model)
+    else:
+        tok = ByteTokenizer()
+    train_loader = make_loader(args.data, tok, block_size=args.block_size, batch_size=args.batch_size, shuffle=True)
     model = GPT(tok.vocab_size, args.block_size, args.n_layers, args.n_head, args.n_embed, args.dropout).to(args.device)
 
     if args.compile and hasattr(torch, "compile"):
@@ -76,13 +87,24 @@ def main():
 
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.95), weight_decay=args.weight_decay)
     scaler = torch.cuda.amp.GradScaler(enabled=(args.amp and args.device.type == "cuda"))
-
+    # specify warmup and scheduler
+    warmup  = min(args.warmup_steps, max(args.steps // 10, 1))
+    scheduler = torch.optim.lr_scheduler.W(opt, lambda t: min(t / warmup, 1.0))
+    amp = AmpGrad(opt, accum=args.grad_accum_steps, amp=args.mixed_precision)
+    logger = init_logger(args.log, out_dir=str(args.out_dir))
+    _log_hparams_tb(logger, args, args.steps)
+    if _is_tb(logger):
+        try:
+            ex_x, ex_y = next(iter(train_loader))
+            _maybe_log_graph_tb(logger, model, ex_x.to(args.device), ex_y.to(args.device))
+        except Exception as e:
+            print(f"Failed to log graph: {e}")
     best_val = float("inf")
     t0  = time.time()
     model.train()
 
     for step in range(1, args.steps + 1):
-        xb, yb = ds.get_batch('train', args.batch_size, args.device)
+        xb, yb = next(train_loader)
         with torch.cuda.amp.autocast(enabled=(args.amp and args.device.type == "cuda")):
             _, loss = model(xb, yb)
         opt.zero_grad(set_to_none=True)
@@ -97,7 +119,7 @@ def main():
             print(f"step {step:5d} | loss {loss.item():.4f} | {time.time() - t0:.2f}s")
             t0 = time.time()
         if step % args.eval_interval == 0:
-            losses = estimate_loss(model, ds, args)
+            losses = estimate_loss(model, train_loader, args)
             print(f"step {step:5d} | train loss {losses['train']:.4f} | val loss {losses['val']:.4f}")
             if losses['val'] < best_val:
                 best_val = losses['val']
@@ -113,8 +135,8 @@ def main():
                                 "dropout": args.dropout
                             }}, ckpt_path)
         if args.sample_every > 0 and step % args.sample_every == 0:
-            start = torch.randint(low=0, high=len(ds.train) - args.block_size -1, size=(1,)).item()
-            seed = ds.train[start:start+args.block_size].unsqueeze(0).to(args.device)
+            start = torch.randint(low=0, high=len(next(train_loader)) - args.block_size -1, size=(1,)).item()
+            seed = next(train_loader)[0][start:start+args.block_size].unsqueeze(0).to(args.device)
             out = model.generate(seed, max_new_tokens=args.sample_tokens, temperature=args.temperature, top_k=args.top_k, top_p=args.top_p)
             txt = tok.decode(out[0].cpu().tolist())
             print(f"step {step:5d} | sample: {txt}")
