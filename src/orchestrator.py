@@ -31,6 +31,8 @@ def main():
     run("python -m pytest -q tests/test_tokenizer_bpe.py")
     run("python -m pytest -q tests/test_scheduler.py")
     run("python -m pytest -q tests/test_resume_shapes.py")
+    run("ptyhon -m pytest -q tests/test_formatter.py")
+    run("python -m pytest -q tests/test_masking.py")
     # matrix math walthrough for mha
     run("python -m src.demos.mha_shapes")
 
@@ -38,6 +40,10 @@ def main():
     run("python src.scripts.train --data data/tiny_hi.txt --steps 400 --sample_every 100 --batch_size 32 --block_size 128 --n_layers 2 --n_head 2 --d_model 128 --dropout 0.1") # block size is the context window size
     # sample from the base checkpoint
     run(f"python src.scripts.sample --checkpoint {RUN / "model.pth"} --tokens 100 --prompt 'Once upon a time'")
+    # quick stroke training on a tiny file path tiny_hi.txt adjust as needed
+    run("python src.scripts.train_sft --data data/tiny_hi.txt --steps 400 --sample_every 100 --batch_size 32 --block_size 128 --n_layers 2 --n_head 2 --d_model 128 --dropout 0.1")
+    run(f"python src.scripts.sample_sft --checkpoint {RUN / "model.pth"} --block_size 256 --tokens 100 --prompt 'Once upon a time'")
+
 
     # evaluate final val loss
     run(f"python src.scripts.evaluate --checkpoint {RUN / "model.pth"} --data data/tiny_hi.txt --iters 50 --block_size 128") # block size is the context window size
