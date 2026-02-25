@@ -23,6 +23,8 @@ def estimate_loss(model: GPT, loader: DataLoader, args: argparse.Namespace) -> d
     model.train()
     return losses
 
+# TODO: turn trianing file implementation into a class to make it more modular and reusable
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--data", type=str, required=True, help="Path to the data file")
