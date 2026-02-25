@@ -43,7 +43,10 @@ def main():
     # quick stroke training on a tiny file path tiny_hi.txt adjust as needed
     run("python src.scripts.train_sft --data data/tiny_hi.txt --steps 400 --sample_every 100 --batch_size 32 --block_size 128 --n_layers 2 --n_head 2 --d_model 128 --dropout 0.1")
     run(f"python src.scripts.sample_sft --checkpoint {RUN / "model.pth"} --block_size 256 --tokens 100 --prompt 'Once upon a time'")
-
+    # train the reward model
+    run("python src.scripts.train_rm --data data/tiny_hi.txt --steps 400 --sample_every 100 --batch_size 32 --block_size 128 --n_layers 2 --n_head 2 --d_model 128 --dropout 0.1")
+    # evaluate the reward model
+    run(f"python src.scripts.eval_rm --checkpoint {RUN / "model.pth"} --data data/tiny_hi.txt --iters 50 --block_size 128")
 
     # evaluate final val loss
     run(f"python src.scripts.evaluate --checkpoint {RUN / "model.pth"} --data data/tiny_hi.txt --iters 50 --block_size 128") # block size is the context window size

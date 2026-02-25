@@ -154,3 +154,31 @@ class GPTModern(nn.Module):
             probs = F.softmax(logits, dim=-1) # (B, block_size, vocab_size)
             next_id = torch.multinomial(probs, num_samples=1) # (B, 1)
             idx = torch.cat([idx, next_id], dim=1) # (B, block_size + 1) # older tokens are shifted to the left
+
+
+
+class RewardModel(nn.Module):
+    def __init__(self, vocab_size: int, block_size: int, n_layer: int=2, n_head: int=2, d_model: int=128, dropout: float=0.0):
+        super().__init__()
+        self.block_size = block_size
+        self.pos_emb = nn.Embedding(vocab_size, d_model)
+        enc_layer = nn.TransformerEncoderLayer(enc_layer, num_layers=n_layer, n_head=n_head, d_model=d_model, dropout=dropout)
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=n_layer)
+        self.ln = nn.LayerNorm(d_model)
+        self.head = nn.Linear(d_model, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T = x.shape
+        pos = torch.arange(T, device=x.device).unsqueeze(0)
+        h = self.tok_emb(x) + self.pos_emb(pos)
+        pad_mask = (x == 2)
+        h = self.encoder(h, src_key_padding_mask=pad_mask)
+        h = self.ln(h)
+        # mask mean pool over tokens (ignoring pads)
+        mask = (~pad_mask).float().unsqueeze(-1)
+        h_sum = (h * mask).sum(dim=1)
+        len_ = mask.sum(dim=1).clamp_min(1.0)
+        pooled = h_sum / len_
+        r = self.head(pooled).squeeze(-1)
+        return r
+        
