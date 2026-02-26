@@ -56,3 +56,6 @@ class BPETokenizer:
     
     def decode(self, ids: List[int]) -> str:
         return self._tok.decode(ids)
+    
+
+RLHFTokenizer = BPETokenizer
